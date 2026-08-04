@@ -700,17 +700,28 @@ async fn cmd_watch(network: &str, interval: &str) -> error::AppResult<()> {
     );
 
     let mut first = true;
+    let mut shutdown_triggered = false;
     loop {
         tokio::select! {
             signal = shutdown_signal() => {
                 signal?;
-                println!("Received stop signal — exiting cleanly.");
-                return Ok(());
+                if shutdown_triggered {
+                    eprintln!("Second signal received — forcing exit (code 130).");
+                    std::process::exit(130);
+                }
+                shutdown_triggered = true;
+                println!("Received stop signal — finishing current poll then exiting cleanly. Send signal again to force-exit.");
+                // Continue the loop to finish the current poll, then exit.
+                // The next iteration will hit the check below and exit.
             }
             () = async {
                 let _ = watch_poll_once(network, &mut first).await;
                 tokio::time::sleep(std::time::Duration::from_secs(interval_secs)).await;
             } => {}
+        }
+        if shutdown_triggered {
+            println!("Shutdown complete — exiting cleanly.");
+            return Ok(());
         }
     }
 }

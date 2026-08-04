@@ -46,7 +46,14 @@ pub fn save_snapshot(snapshot: &ConfigSnapshot, out_path: Option<&str>) -> AppRe
     };
 
     let json = serde_json::to_string_pretty(snapshot)?;
-    std::fs::write(&path, json)?;
+
+    // Write to a temporary file first, then atomically rename to the final
+    // path. This prevents partial/invalid snapshots if the process is
+    // interrupted (SIGINT) during the write.
+    let tmp_path = path.with_extension("tmp");
+    std::fs::write(&tmp_path, &json)?;
+    std::fs::rename(&tmp_path, &path)?;
+
     Ok(path)
 }
 
